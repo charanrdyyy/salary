@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Driver salary ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+:root{
+  --bg:#E8ECEF; --surface:#FFFFFF; --surface-2:#F3F5F7; --ink:#16222B; --muted:#56656F;
+  --line:#C9D1D8; --head:#1E3646; --head-ink:#F1F5F8; --sign:#F2B705; --sign-ink:#1B1500;
+  --neg:#B3261E; --pos:#1D6A39; --focus:#2A6FDB;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E151A; --surface:#162129; --surface-2:#1C2933; --ink:#E4EAEE; --muted:#93A2AD;
+    --line:#2C3B46; --head:#0A1218; --head-ink:#E4EAEE; --sign:#F2B705; --sign-ink:#1B1500;
+    --neg:#FF8A80; --pos:#7BD69A; --focus:#7FB0FF; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E151A; --surface:#162129; --surface-2:#1C2933; --ink:#E4EAEE; --muted:#93A2AD;
+  --line:#2C3B46; --head:#0A1218; --head-ink:#E4EAEE; --sign:#F2B705; --sign-ink:#1B1500;
+  --neg:#FF8A80; --pos:#7BD69A; --focus:#7FB0FF; color-scheme: dark;
+}
+:root{ box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+*,*::before,*::after{ box-sizing:inherit; }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); }
+body{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+h1,h2,h3{ font-family:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif; font-weight:700; margin:0; line-height:1.15; }
+button,input,select{ font:inherit; color:inherit; }
+:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+
+/* Header with lane-marking stripe */
+.top{ background:var(--head); color:var(--head-ink); position:relative; }
+.top-inner{ max-width:1400px; margin:0 auto; padding:14px 20px 18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.top h1{ font-size:26px; letter-spacing:.2px; }
+.top::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:5px;
+  background:repeating-linear-gradient(90deg,var(--sign) 0 38px,transparent 38px 62px); }
+.status{ margin-left:auto; font-size:13px; opacity:.85; }
+.status.err{ color:#FFB4A9; opacity:1; }
+
+.wrap{ max-width:1400px; margin:0 auto; padding:20px; display:grid; grid-template-columns:260px minmax(0,1fr); gap:20px; align-items:start; }
+@media (max-width:860px){ .wrap{ grid-template-columns:1fr; padding:14px; } }
+
+.panel{ background:var(--surface); border:1px solid var(--line); border-radius:8px; }
+.side{ padding:14px; display:flex; flex-direction:column; gap:10px; }
+.side h2{ font-size:18px; }
+.side input[type=search]{ border:1px solid var(--line); border-radius:6px; padding:7px 9px; background:var(--surface); width:100%; }
+label.f input[list]{ text-transform:uppercase; }
+label.f input[list]::placeholder{ text-transform:none; }
+.drivers{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; max-height:55vh; overflow:auto; }
+.drivers button{ width:100%; text-align:left; background:transparent; border:1px solid transparent; border-radius:6px; padding:8px 10px; cursor:pointer; display:flex; flex-direction:column; }
+.drivers button:hover{ background:var(--surface-2); }
+.drivers button[aria-current="true"]{ background:var(--surface-2); border-color:var(--line); box-shadow:inset 4px 0 0 var(--sign); }
+.drivers .dn{ font-weight:600; }
+.drivers .dc{ font-size:13px; color:var(--muted); }
+.empty-note{ color:var(--muted); font-size:14px; margin:0; }
+
+.btn{ border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:500; white-space:nowrap; }
+.btn:hover{ background:var(--surface-2); }
+.btn.primary{ background:var(--sign); color:var(--sign-ink); border-color:var(--sign); font-weight:600; }
+.btn.primary:hover{ filter:brightness(.95); }
+.btn.danger{ color:var(--neg); }
+.btn.small{ padding:4px 10px; font-size:13px; }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+
+.main{ display:flex; flex-direction:column; gap:20px; min-width:0; }
+.welcome{ padding:40px 28px; }
+.welcome h2{ font-size:24px; margin-bottom:8px; }
+.welcome p{ color:var(--muted); max-width:60ch; margin:0 0 18px; }
+
+.sheet-head{ padding:16px 18px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+.sheet-head h2{ font-size:24px; }
+.sheet-head .meta{ color:var(--muted); font-size:14px; }
+.sheet-head .actions{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+
+.totals{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); border-top:1px solid var(--line); }
+.totals div{ padding:10px 18px; border-right:1px solid var(--line); }
+.totals div:last-child{ border-right:0; }
+.totals span{ display:block; font-size:13px; color:var(--muted); }
+.totals b{ font-size:20px; font-family:"Barlow Semi Condensed",system-ui,sans-serif; }
+
+form.entry{ padding:16px 18px; display:flex; flex-direction:column; gap:16px; }
+form.entry h3{ font-size:18px; }
+fieldset{ border:0; margin:0; padding:0; }
+legend{ font-weight:600; color:var(--muted); font-size:14px; margin-bottom:6px; padding:0; }
+.grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px 12px; }
+label.f{ display:flex; flex-direction:column; gap:3px; font-size:13px; color:var(--muted); }
+label.f input,label.f select{ color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 9px; min-width:0; width:100%; font-size:15px; }
+label.f input[type=number]{ text-align:right; }
+
+.calc{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); background:var(--surface-2); border:1px solid var(--line); border-radius:6px; }
+.calc div{ padding:10px 14px; }
+.calc span{ display:block; font-size:13px; color:var(--muted); }
+.calc b{ font-size:20px; font-family:"Barlow Semi Condensed",system-ui,sans-serif; }
+.calc .bal{ border-left:4px solid var(--sign); }
+.formula{ font-size:13px; color:var(--muted); margin:0; }
+.form-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.form-msg{ font-size:14px; color:var(--neg); }
+
+.table-panel{ padding:0; }
+.table-panel h3{ font-size:18px; padding:14px 18px 10px; }
+.scroll{ overflow-x:auto; border-top:1px solid var(--line); }
+table{ border-collapse:collapse; width:100%; font-size:14px; white-space:nowrap; }
+th,td{ padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; }
+th{ background:var(--surface-2); font-weight:600; font-size:12.5px; color:var(--muted); position:sticky; top:0; }
+td.n,th.n{ text-align:right; }
+td.calcd{ background:color-mix(in srgb, var(--sign) 9%, transparent); }
+tr.editing td{ background:color-mix(in srgb, var(--focus) 12%, transparent); }
+tfoot td{ font-weight:600; border-bottom:0; }
+.neg{ color:var(--neg); }
+.no-rows{ padding:24px 18px; color:var(--muted); margin:0; }
+
+dialog{ border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); padding:0; width:min(560px,calc(100vw - 24px)); }
+dialog::backdrop{ background:rgba(5,12,18,.55); }
+.dlg{ padding:18px; display:flex; flex-direction:column; gap:14px; max-height:85vh; overflow:auto; }
+.dlg h2{ font-size:22px; }
+.dlg-actions{ display:flex; justify-content:flex-end; gap:8px; }
+.list-block{ border-top:1px solid var(--line); padding-top:12px; }
+.list-block h3{ font-size:16px; margin-bottom:8px; }
+.chips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+.chip{ display:inline-flex; align-items:center; gap:4px; background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:2px 4px 2px 10px; font-size:14px; }
+.chip button{ border:0; background:transparent; cursor:pointer; width:22px; height:22px; border-radius:50%; color:var(--muted); font-size:15px; line-height:1; }
+.chip button:hover{ background:var(--line); color:var(--ink); }
+.add-row{ display:flex; gap:6px; }
+.add-row input{ flex:1; min-width:0; border:1px solid var(--line); border-radius:6px; padding:6px 9px; background:var(--surface); }
+
+.toast{ position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:var(--head); color:var(--head-ink); padding:10px 16px; border-radius:6px; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:20; }
+.toast.show{ opacity:1; }
+@media (prefers-reduced-motion: reduce){ .toast{ transition:none; } }
+[hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <h1>Driver salary ledger</h1>
+    <span class="status" id="status">Loading…</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="panel side">
+    <h2>Drivers</h2>
+    <button class="btn primary" id="addDriverBtn" type="button">Add driver</button>
+    <input type="search" id="driverSearch" placeholder="Search name or code" aria-label="Search drivers">
+    <ul class="drivers" id="driverList"></ul>
+    <p class="empty-note" id="noDrivers">No drivers yet.</p>
+    <button class="btn" id="listsBtn" type="button">Edit dropdown lists</button>
+    <button class="btn" id="exportAllBtn" type="button">Export all drivers to Excel</button>
+  </aside>
+
+  <main class="main">
+    <section class="panel welcome" id="welcome">
+      <h2>Start by adding a driver</h2>
+      <p>Add your trucks, grades, places and batha percentages under “Edit dropdown lists”, then add a driver. Each driver gets their own sheet where you can enter as many trips as you need and export them to Excel.</p>
+      <button class="btn primary" type="button" id="welcomeAdd">Add driver</button>
+    </section>
+
+    <div id="sheet" hidden>
+      <section class="panel">
+        <div class="sheet-head">
+          <div>
+            <h2 id="sheetName"></h2>
+            <div class="meta" id="sheetMeta"></div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="button" id="exportBtn">Export to Excel</button>
+            <button class="btn" type="button" id="editDriverBtn">Edit driver</button>
+            <button class="btn danger" type="button" id="delDriverBtn">Delete driver</button>
+          </div>
+        </div>
+        <div class="totals" id="totals"></div>
+      </section>
+
+      <section class="panel" style="margin-top:20px">
+        <form class="entry" id="entryForm" autocomplete="off">
+          <h3 id="formTitle">New entry</h3>
+          <fieldset>
+            <legend>Trip</legend>
+            <div class="grid">
+              <label class="f">Date<input type="date" name="date" required></label>
+              <label class="f">Truck no<input name="truck" list="dl-trucks" placeholder="Type to search"></label>
+              <label class="f">Driver code<input name="code" id="selCode" list="dl-codes" placeholder="Type to search"></label>
+              <label class="f">Driver name<input name="name" id="selName" list="dl-names" placeholder="Type to search"></label>
+              <label class="f">Qty<input type="number" name="qty" step="any" min="0" inputmode="decimal"></label>
+              <label class="f">Grade<input name="grade" list="dl-grades" placeholder="Type to search"></label>
+              <label class="f">T/NT<select name="tnt" data-list="tnt"></select></label>
+              <label class="f">From<input name="from" list="dl-from" placeholder="Pick or type other"></label>
+              <label class="f">Destination<input name="dest" list="dl-dest" placeholder="Type place"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Advance and expenses</legend>
+            <div class="grid">
+              <label class="f">Advance<input type="number" name="advance" step="any" inputmode="decimal"></label>
+              <label class="f">Load<input type="number" name="load" step="any" inputmode="decimal"></label>
+              <label class="f">Unload<input type="number" name="unload" step="any" inputmode="decimal"></label>
+              <label class="f">RTO<input type="number" name="rto" step="any" inputmode="decimal"></label>
+              <label class="f">PC<input type="number" name="pc" step="any" inputmode="decimal"></label>
+              <label class="f">Gate<input type="number" name="gate" step="any" inputmode="decimal"></label>
+              <label class="f">Bills<input type="number" name="bills" step="any" inputmode="decimal"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Freight</legend>
+            <div class="grid">
+              <label class="f">Driver frt (per qty)<input type="number" name="driverFrt" step="any" inputmode="decimal"></label>
+              <label class="f">Tot frt (Qty × Driver frt)<input type="text" id="totFrtView" readonly tabindex="-1"></label>
+              <label class="f">Batha %<select name="batha" data-list="batha"></select></label>
+            </div>
+          </fieldset>
+
+          <div class="calc" aria-live="polite">
+            <div><span>Karchu</span><b id="cKarchu">0</b></div>
+            <div><span>Tot frt</span><b id="cTot">0</b></div>
+            <div><span>Batha</span><b id="cBatha">0</b></div>
+            <div class="bal"><span>Balance</span><b id="cBal">0</b></div>
+          </div>
+          <p class="formula">Karchu = Load + Unload + RTO + PC + Gate + Bills. Tot frt = Qty × Driver frt, or the fixed amount if you enter one. Batha = Tot frt × Batha %. Balance = Batha − (Advance − Karchu). For an advance-only day, enter just the date and advance.</p>
+
+          <div class="form-actions">
+            <button class="btn primary" type="submit" id="saveEntryBtn">Add entry</button>
+            <button class="btn" type="button" id="clearBtn">Clear form</button>
+            <span class="form-msg" id="formMsg"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel table-panel" style="margin-top:20px">
+        <h3 id="tableTitle">Entries</h3>
+        <div class="scroll" id="tableWrap"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog id="driverDlg">
+  <form class="dlg" id="driverForm" method="dialog" autocomplete="off">
+    <h2 id="driverDlgTitle">Add driver</h2>
+    <label class="f">Driver code<input name="code" required></label>
+    <label class="f">Driver name<input name="name" required></label>
+    <label class="f">Usual truck no (optional)<input name="truck" list="dl-trucks" placeholder="Type to search"></label>
+    <span class="form-msg" id="driverMsg"></span>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="driverCancel">Cancel</button>
+      <button class="btn primary" type="submit" id="driverSave">Add driver</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="listsDlg">
+  <div class="dlg">
+    <h2>Dropdown lists</h2>
+    <p class="empty-note">These options appear in the dropdowns for every driver.</p>
+    <div id="listsBody"></div>
+    <div class="dlg-actions"><button class="btn primary" type="button" id="listsDone">Done</button></div>
+  </div>
+</dialog>
+
+<div id="datalists"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+const $ = s => document.querySelector(s);
+const LISTS = [["trucks","Truck no"],["grades","Grade"],["tnt","T/NT"],["from","From"],["dest","Destination"],["batha","Batha %"]];
+const FIELDS = ["date","truck","code","name","qty","grade","tnt","from","dest","advance","load","unload","rto","pc","gate","bills","driverFrt","batha"];
+const LS_KEY = "driver-salary-ledger-v1";
+
+let state = freshState();
+let entries = {};
+let currentId = null;
+let editingId = null;
+let editingDriver = null;
+
+function freshState(){ return { lists:{ trucks:[], grades:[], tnt:["T","NT"], from:[], dest:[], batha:["11"] }, drivers:[], seedVersion:0 }; }
+
+/* ---------- built-in master data (added once; edit later under “Edit dropdown lists”) ---------- */
+const SEED_VERSION = 2;
+const SEED_LISTS = {
+  trucks: ["AP39VD6699","AP39VD6679","KA01AS6699","KA01AR4336","KA01AR4337","KA01AU6699","AP39WD6658","KA01AR4335","AP39UQ6688","AP39UP6699","AP39UP6688","AP39UQ6699","AP39VD6688","AP39VD0011","AP39VD0055","AP39VD0077","AP39VB0077","AP39WL6679","AP39WL6689","KA01AS6688","KA01AS6679","KA01AS6689","KA01AR4334","AP39WQ4339","AP39UU6688","AP39UU6699","AP39WD6628","AP39WD6638","AP39WD6648","AP39WD6688","AP39WD6699","AP39WD6689","AP39WD6679","AP39WR3446","AP39VE3447","AP39WR3448","AP39WS3446","AP39WS3448","AP39WP9699","AP39WB9292","AP39WH6699","AP39WY4899","AP39WY4799","AP04TW4646","AP39WD6446","KA01AT6688"],
+  grades: ["OPC","PPC","SLAG","FLYASH","GYPSUM","COAL","ADVANCE"],
+  tnt: ["T","NT"],
+  from: ["ZUARI","KP PORT","NAGARJUNA","PARASHAKTHI","ZUARI SPM","JAIRAJ","CHETTINAD"],
+  batha: ["11","12"]
+};
+const SEED_DRIVERS = [
+  ["LGR0001","RAHUL SINGH GOND"],["LGR0002","SUNIL KUMAR SINGH"],["LGR0003","RAMIREDDY LATEESH REDDY"],["LGR0004","M SURESH"],
+  ["LGR0005","KAMLESH SINGH"],["LGR0007","RAMIREDDY CHINNA PRASAD REDDY"],["LGR0008","SAI DESWARAIAH M"],["LGR0009","MAN SINGH GOND"],
+  ["LGR0010","JAJPEER S"],["LGR0011","RAJESH KUMAR RAWAT"],["LGR0012","SANKARAIAH K"],["LGR0014","VENKATA SUBBAIAH MALLINENI"],
+  ["LGR0015","ANIL KUMAR SINGH GOND"],["LGR0016","ASHOK SINGH GOND"],["LGR0017","CHINNA SESHAIAH JONNA"],["LGR0020","CHANDRA BATTHALA"],
+  ["LGR0023","MABU SHAREEF G"],["LGR0025","SRIKANTH"],["LGR0027","K V LAKSHMI NAIDU"],["LGR0028","LAKSHUMAIAH P"],
+  ["LGR0029","RAMALAKSHMIREDDY K"],["LGR0033","KHASIM VALLI SHAIK"],["LGR0034","AMRIT LAL BAJGA"],["LGR0040","K NAGA RAJU"],
+  ["LGR0043","K.C.SEKHAR REDDY"],["LGR0044","M. VENKATA RAMANA"],["LGR0046","PRAKASH NARAYAN SINGH GOND"],["LGR0051","MAHESH KUMAR K"],
+  ["LGR0056","TEJ BHAN SINGH"],["LGR0058","BHARGAV"],["LGR0059","AJAY KOL"],["LGR0063","SRINU"],
+  ["LGR0064","AJAY BAHELIYA"],["LGR0084","ROSHAN"],["LGR0091","SHIVA NAGA MALLESH PAPAGARI"],["LGR0093","MAHESH BABU CHENNURU"],
+  ["LGR0094","VIJAY SINGH GOND"],["LGR0097","RAJA N"],["LGR0099","CHENDRAYUDU"],["LGR0100","MANOJ"],
+  ["LGR0101","ASHISH SINGH"],["LGR0102","RAJ KUMAR SINGH"]
+];
+function applySeed(s){
+  if ((s.seedVersion || 0) >= SEED_VERSION) return false;
+  for (const [k, vals] of Object.entries(SEED_LISTS)){
+    const cur = s.lists[k] = s.lists[k] || [];
+    for (const v of vals) if (!cur.some(x => x.toUpperCase() === v.toUpperCase())) cur.push(v);
+  }
+  for (const [code, name] of SEED_DRIVERS){
+    if (!s.drivers.some(d => d.code.toUpperCase() === code)) s.drivers.push({ id: uid(), code, name, truck: "" });
+  }
+  s.seedVersion = SEED_VERSION;
+  return true;
+}
+function mergeState(s){
+  const base = freshState();
+  if (!s || typeof s !== "object") return base;
+  const lists = Object.assign({}, base.lists);
+  if (s.lists) for (const [k] of LISTS) if (Array.isArray(s.lists[k])) lists[k] = s.lists[k].map(String);
+  return { lists, drivers: Array.isArray(s.drivers) ? s.drivers.map(d => ({...d})) : [], seedVersion: s.seedVersion || 0 };
+}
+const clone = o => JSON.parse(JSON.stringify(o));
+const uid = () => "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const r2 = n => Math.round(n * 100) / 100;
+const fmt = n => r2(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const fmt0 = n => Math.round(n).toLocaleString("en-IN");
+const hasManual = e => e.totFrtManual !== undefined && e.totFrtManual !== null && String(e.totFrtManual).trim() !== "";
+
+function calc(e){
+  const karchu = num(e.load)+num(e.unload)+num(e.rto)+num(e.pc)+num(e.gate)+num(e.bills);
+  const totFrt = hasManual(e) ? num(e.totFrtManual) : num(e.qty) * num(e.driverFrt);
+  const batha = totFrt * num(e.batha) / 100;
+  const valueX = num(e.advance) - karchu;
+  const balance = batha - valueX;
+  return { karchu, totFrt, batha, valueX, balance };
+}
+
+/* ---------- storage ---------- */
+const S = { db:null, uid:null };
+const chains = {};
+function setStatus(t, err){ const el = $("#status"); el.textContent = t; el.classList.toggle("err", !!err); }
+function lsSave(){ try { localStorage.setItem(LS_KEY, JSON.stringify({ state, entries })); } catch(e){} }
+function lsLoad(){ try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null; } catch(e){ return null; } }
+function queue(path, fn){
+  chains[path] = (chains[path] || Promise.resolve()).then(fn)
+    .then(() => setStatus("All changes saved"))
+    .catch(err => setStatus("Couldn’t save to your account (" + ((err && err.code) || "error") + "). Kept on this device.", true));
+}
+function saveMasters(){
+  lsSave();
+  if (!S.db) { setStatus("Saved on this device"); return; }
+  const path = "data/users/" + S.uid + "/masters"; const data = clone(state);
+  queue(path, () => S.db.doc(path).set(data));
+}
+function saveDriver(id){
+  lsSave();
+  if (!S.db) { setStatus("Saved on this device"); return; }
+  const path = "data/users/" + S.uid + "/drv-" + id; const data = { rows: clone(entries[id] || []) };
+  queue(path, () => S.db.doc(path).set(data));
+}
+function removeDriverDoc(id){
+  lsSave();
+  if (!S.db) return;
+  const path = "data/users/" + S.uid + "/drv-" + id;
+  queue(path, () => S.db.doc(path).delete());
+}
+
+async function init(){
+  const local = lsLoad();
+  if (local) { state = mergeState(local.state); entries = local.entries || {}; }
+  if (applySeed(state)) lsSave();
+  renderAll();
+  setStatus("Saved on this device");
+  try {
+    if (!window.claude || typeof window.claude.use !== "function") return;
+    const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+    if (!db || !user) return;
+    const id = await user.id();
+    if (!id) return;
+    S.db = db; S.uid = id;
+    const m = await db.doc("data/users/" + id + "/masters").get();
+    if (m.exists) {
+      state = mergeState(clone(m.data()));
+      if (applySeed(state)) saveMasters();
+      const docs = await Promise.all(state.drivers.map(d => db.doc("data/users/" + id + "/drv-" + d.id).get()));
+      const next = {};
+      state.drivers.forEach((d, i) => {
+        next[d.id] = docs[i].exists ? clone(docs[i].data().rows || []) : ((local && local.entries && local.entries[d.id]) || []);
+      });
+      entries = next;
+      lsSave();
+      if (currentId && !state.drivers.find(d => d.id === currentId)) currentId = null;
+      renderAll();
+    } else {
+      saveMasters(); state.drivers.forEach(d => { if ((entries[d.id] || []).length) saveDriver(d.id); });
+    }
+    setStatus("Saved to your account");
+  } catch(e) {
+    S.db = null;
+    setStatus("Saved on this device");
+  }
+}
+
+/* ---------- rendering ---------- */
+function driverById(id){ return state.drivers.find(d => d.id === id); }
+function sortedRows(id){
+  return (entries[id] || []).slice().sort((a,b) => (a.date || "").localeCompare(b.date || ""));
+}
+function fillSelect(sel, values, current, placeholder){
+  const vals = values.slice();
+  if (current && !vals.includes(current)) vals.push(current);
+  sel.innerHTML = "";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = placeholder || "Select"; sel.appendChild(o0);
+  for (const v of vals){ const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); }
+  sel.value = current || "";
+}
+function fillListSelects(root){
+  root.querySelectorAll("select[data-list]").forEach(sel => {
+    const key = sel.dataset.list;
+    const label = key === "batha" ? (v => v) : null;
+    fillSelect(sel, state.lists[key] || [], sel.value);
+    if (label) sel.querySelectorAll("option").forEach(o => { if (o.value) o.textContent = o.value + "%"; });
+  });
+}
+function fillDriverSelects(code, name){ $("#selCode").value = code || ""; $("#selName").value = name || ""; }
+function renderDatalists(){
+  const host = $("#datalists"); host.innerHTML = "";
+  const mk = (id, items) => {
+    const dl = document.createElement("datalist"); dl.id = id;
+    for (const [v, l] of items){ const o = document.createElement("option"); o.value = v; if (l) o.label = l; dl.appendChild(o); }
+    host.appendChild(dl);
+  };
+  const ds = state.drivers.slice().sort((a,b) => a.code.localeCompare(b.code));
+  mk("dl-trucks", state.lists.trucks.map(v => [v]));
+  mk("dl-codes", ds.map(d => [d.code, d.name]));
+  mk("dl-names", ds.map(d => [d.name, d.code]));
+  mk("dl-grades", state.lists.grades.map(v => [v]));
+  mk("dl-from", state.lists.from.map(v => [v]));
+  const dest = new Set(state.lists.dest);
+  Object.values(entries).forEach(rows => (rows || []).forEach(e => { if (e.dest) dest.add(e.dest); }));
+  mk("dl-dest", [...dest].sort().map(v => [v]));
+}
+
+function renderDrivers(){
+  const ul = $("#driverList"); ul.innerHTML = "";
+  $("#exportAllBtn").disabled = state.drivers.length === 0;
+  const q = ($("#driverSearch").value || "").trim().toUpperCase();
+  const list = state.drivers.slice().sort((a,b) => a.code.localeCompare(b.code))
+    .filter(d => !q || d.code.toUpperCase().includes(q) || d.name.toUpperCase().includes(q));
+  for (const d of list){
+    const li = document.createElement("li");
+    const b = document.createElement("button"); b.type = "button";
+    b.setAttribute("aria-current", d.id === currentId ? "true" : "false");
+    const n = document.createElement("span"); n.className = "dn"; n.textContent = d.name;
+    const c = document.createElement("span"); c.className = "dc";
+    const count = (entries[d.id] || []).length;
+    c.textContent = d.code + " · " + count + (count === 1 ? " entry" : " entries");
+    b.append(n, c);
+    b.addEventListener("click", () => openDriver(d.id));
+    li.appendChild(b); ul.appendChild(li);
+  }
+  const nd = $("#noDrivers");
+  nd.textContent = state.drivers.length ? "No driver matches your search." : "No drivers yet.";
+  nd.hidden = list.length > 0;
+}
+
+function renderSheet(){
+  const d = driverById(currentId);
+  $("#welcome").hidden = !!d;
+  $("#sheet").hidden = !d;
+  if (!d) return;
+  $("#sheetName").textContent = d.name;
+  $("#sheetMeta").textContent = "Driver code " + d.code + (d.truck ? " · Usual truck " + d.truck : "");
+  renderTotals(); renderTable();
+}
+
+function totalsFor(id){
+  const t = { n:0, qty:0, advance:0, karchu:0, totFrt:0, batha:0, balance:0 };
+  for (const e of entries[id] || []){
+    const c = calc(e); t.n++; t.qty += num(e.qty); t.advance += num(e.advance);
+    t.karchu += c.karchu; t.totFrt += c.totFrt; t.batha += c.batha; t.balance += c.balance;
+  }
+  return t;
+}
+function renderTotals(){
+  const t = totalsFor(currentId);
+  const items = [["Entries", t.n], ["Total qty", fmt(t.qty)], ["Advance", fmt(t.advance)], ["Karchu", fmt(t.karchu)], ["Tot frt", fmt(t.totFrt)], ["Batha", fmt0(t.batha)], ["Balance", fmt0(t.balance)]];
+  const box = $("#totals"); box.innerHTML = "";
+  for (const [k,v] of items){ const div = document.createElement("div"); const s = document.createElement("span"); s.textContent = k; const b = document.createElement("b"); b.textContent = v; div.append(s,b); box.appendChild(div); }
+}
+
+const COLS = [
+  ["Date","date"],["Truck no","truck"],["Driver code","code"],["Driver name","name"],["Qty","qty",1],["Grade","grade"],["T/NT","tnt"],["From","from"],["Destination","dest"],
+  ["Advance","advance",1],["Load","load",1],["Unload","unload",1],["RTO","rto",1],["PC","pc",1],["Gate","gate",1],["Bills","bills",1],
+  ["Karchu","_karchu",2],["Driver frt","driverFrt",1],["Tot frt","_totFrt",2],["Batha %","batha",1],["Batha","_batha",2],["Bal","_balance",2]
+];
+function showDate(s){ if (!s) return ""; const [y,m,d] = s.split("-"); return d && m && y ? d + "." + m + "." + y : s; }
+const whole = k => k === "_batha" || k === "_balance";
+
+function renderTable(){
+  const rows = sortedRows(currentId);
+  const wrap = $("#tableWrap"); wrap.innerHTML = "";
+  $("#tableTitle").textContent = "Entries (" + rows.length + ")";
+  if (!rows.length){ const p = document.createElement("p"); p.className = "no-rows"; p.textContent = "No entries yet. Fill in the form above and choose “Add entry”."; wrap.appendChild(p); return; }
+  const table = document.createElement("table");
+  const thead = document.createElement("thead"); const hr = document.createElement("tr");
+  for (const [label,,kind] of COLS){ const th = document.createElement("th"); th.textContent = label; if (kind) th.className = "n"; hr.appendChild(th); }
+  const thA = document.createElement("th"); thA.textContent = ""; hr.appendChild(thA);
+  thead.appendChild(hr); table.appendChild(thead);
+  const tb = document.createElement("tbody");
+  const sum = {};
+  for (const e of rows){
+    const c = calc(e);
+    const tr = document.createElement("tr"); if (e.id === editingId) tr.className = "editing";
+    for (const [, key, kind] of COLS){
+      const td = document.createElement("td");
+      let v;
+      if (key[0] === "_"){ v = c[key.slice(1)]; td.className = "n calcd"; td.textContent = whole(key) ? fmt0(v) : fmt(v); if (v < 0) td.classList.add("neg"); sum[key] = (sum[key] || 0) + v; }
+      else if (kind === 1){ v = num(e[key]); td.className = "n"; td.textContent = e[key] === "" || e[key] == null ? "" : fmt(v); if (key !== "batha") sum[key] = (sum[key] || 0) + v; }
+      else td.textContent = key === "date" ? showDate(e.date) : (e[key] || "");
+      tr.appendChild(td);
+    }
+    const tdA = document.createElement("td");
+    const be = document.createElement("button"); be.type = "button"; be.className = "btn small"; be.textContent = "Edit";
+    be.addEventListener("click", () => startEdit(e.id));
+    const bd = document.createElement("button"); bd.type = "button"; bd.className = "btn small danger"; bd.textContent = "Delete"; bd.style.marginLeft = "6px";
+    armDelete(bd, () => deleteEntry(e.id));
+    tdA.append(be, bd); tr.appendChild(tdA); tb.appendChild(tr);
+  }
+  table.appendChild(tb);
+  const tf = document.createElement("tfoot"); const fr = document.createElement("tr");
+  COLS.forEach(([, key, kind], i) => {
+    const td = document.createElement("td");
+    if (i === 0) td.textContent = "Total";
+    else if (kind && sum[key] !== undefined){ td.className = "n"; td.textContent = whole(key) ? fmt0(sum[key]) : fmt(sum[key]); if (sum[key] < 0) td.classList.add("neg"); }
+    fr.appendChild(td);
+  });
+  fr.appendChild(document.createElement("td"));
+  tf.appendChild(fr); table.appendChild(tf);
+  wrap.appendChild(table);
+}
+
+function armDelete(btn, action){
+  let timer = null; const orig = btn.textContent;
+  btn.addEventListener("click", () => {
+    if (btn.dataset.armed){ clearTimeout(timer); action(); return; }
+    btn.dataset.armed = "1"; btn.textContent = "Confirm delete";
+    timer = setTimeout(() => { delete btn.dataset.armed; btn.textContent = orig; }, 3000);
+  });
+}
+
+function renderAll(){ renderDatalists(); renderDrivers(); renderSheet(); }
+
+/* ---------- entry form ---------- */
+const form = $("#entryForm");
+function today(){ const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function readForm(){ const o = {}; for (const f of FIELDS) o[f] = form.elements[f].value.trim(); return o; }
+function writeForm(e){
+  fillListSelects(form);
+  fillDriverSelects(e.code, e.name);
+  for (const f of FIELDS){
+    const el = form.elements[f];
+    if (el.tagName === "SELECT"){ if (e[f] && ![...el.options].some(o => o.value === e[f])){ const o = document.createElement("option"); o.value = e[f]; o.textContent = e[f]; el.appendChild(o); } }
+    el.value = e[f] == null ? "" : e[f];
+  }
+  updateCalc();
+}
+function blankEntry(){
+  const d = driverById(currentId) || {};
+  return { date: today(), truck: d.truck || "", code: d.code || "", name: d.name || "", tnt: "", batha: state.lists.batha[0] || "" };
+}
+function resetForm(){
+  editingId = null;
+  $("#formTitle").textContent = "New entry";
+  $("#saveEntryBtn").textContent = "Add entry";
+  $("#formMsg").textContent = "";
+  for (const f of FIELDS) form.elements[f].value = "";
+  writeForm(blankEntry());
+}
+function updateCalc(){
+  const c = calc(readForm());
+  $("#cKarchu").textContent = fmt(c.karchu);
+  $("#cTot").textContent = fmt(c.totFrt);
+  $("#totFrtView").value = fmt(c.totFrt);
+  $("#cBatha").textContent = fmt0(c.batha);
+  const b = $("#cBal"); b.textContent = fmt0(c.balance); b.classList.toggle("neg", c.balance < 0);
+}
+form.addEventListener("input", updateCalc);
+form.addEventListener("change", updateCalc);
+const eq = (a, b) => String(a || "").trim().toUpperCase() === String(b || "").trim().toUpperCase();
+const inList = (list, v) => list.find(x => eq(x, v));
+$("#selCode").addEventListener("input", e => { const d = state.drivers.find(x => eq(x.code, e.target.value)); if (d){ e.target.value = d.code; $("#selName").value = d.name; } });
+$("#selName").addEventListener("input", e => { const d = state.drivers.find(x => eq(x.name, e.target.value)); if (d){ e.target.value = d.name; $("#selCode").value = d.code; } });
+
+form.addEventListener("submit", ev => {
+  ev.preventDefault();
+  const e = readForm();
+  if (!e.date){ $("#formMsg").textContent = "Enter a date for this entry."; return; }
+  if (!e.advance && !e.qty && !e.totFrtManual){ $("#formMsg").textContent = "Enter a qty for a trip, or an advance for an advance-only day."; return; }
+  const bad = [];
+  const tk = inList(state.lists.trucks, e.truck);
+  if (e.truck && !tk) bad.push("truck no " + e.truck.toUpperCase()); else if (tk) e.truck = tk;
+  const drv = state.drivers.find(x => eq(x.code, e.code));
+  if (!drv) bad.push("driver code " + (e.code ? e.code.toUpperCase() : "(empty)")); else { e.code = drv.code; e.name = drv.name; }
+  const gr = inList(state.lists.grades, e.grade);
+  if (e.grade && !gr) bad.push("grade " + e.grade.toUpperCase()); else if (gr) e.grade = gr;
+  if (bad.length){ $("#formMsg").textContent = "Pick from the list for " + bad.join(", ") + ". New options can be added under “Edit dropdown lists”."; return; }
+  e.from = inList(state.lists.from, e.from) || e.from.toUpperCase();
+  e.dest = e.dest.toUpperCase();
+  const list = entries[currentId] = entries[currentId] || [];
+  if (editingId){
+    const i = list.findIndex(x => x.id === editingId);
+    if (i >= 0) list[i] = Object.assign({ id: editingId }, e);
+    toast("Entry updated");
+  } else {
+    list.push(Object.assign({ id: uid() }, e));
+    toast("Entry added");
+  }
+  saveDriver(currentId);
+  const wasEditing = !!editingId;
+  const keep = { date: e.date, truck: e.truck, code: e.code, name: e.name, grade: e.grade, tnt: e.tnt, from: e.from, dest: e.dest, driverFrt: e.driverFrt, batha: e.batha };
+  resetForm();
+  if (!wasEditing) writeForm(Object.assign(blankEntry(), keep));
+  renderAll();
+});
+$("#clearBtn").addEventListener("click", () => { resetForm(); renderTable(); });
+
+function startEdit(id){
+  const e = (entries[currentId] || []).find(x => x.id === id); if (!e) return;
+  editingId = id;
+  $("#formTitle").textContent = "Edit entry";
+  $("#saveEntryBtn").textContent = "Save changes";
+  $("#formMsg").textContent = "";
+  writeForm(e);
+  renderTable();
+  form.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+function deleteEntry(id){
+  entries[currentId] = (entries[currentId] || []).filter(x => x.id !== id);
+  if (editingId === id) resetForm();
+  saveDriver(currentId); renderAll(); toast("Entry deleted");
+}
+
+/* ---------- drivers ---------- */
+function openDriver(id){
+  currentId = id; editingId = null;
+  renderAll(); resetForm();
+}
+const driverDlg = $("#driverDlg"), driverForm = $("#driverForm");
+function openDriverDialog(d){
+  editingDriver = d ? d.id : null;
+  $("#driverDlgTitle").textContent = d ? "Edit driver" : "Add driver";
+  $("#driverSave").textContent = d ? "Save driver" : "Add driver";
+  $("#driverMsg").textContent = "";
+  driverForm.elements.code.value = d ? d.code : "";
+  driverForm.elements.name.value = d ? d.name : "";
+  driverForm.elements.truck.value = d && d.truck ? d.truck : "";
+  driverDlg.showModal();
+  driverForm.elements.code.focus();
+}
+$("#addDriverBtn").addEventListener("click", () => openDriverDialog(null));
+$("#driverSearch").addEventListener("input", renderDrivers);
+$("#welcomeAdd").addEventListener("click", () => openDriverDialog(null));
+$("#editDriverBtn").addEventListener("click", () => openDriverDialog(driverById(currentId)));
+$("#driverCancel").addEventListener("click", () => driverDlg.close());
+driverForm.addEventListener("submit", ev => {
+  ev.preventDefault();
+  const code = driverForm.elements.code.value.trim().toUpperCase();
+  const name = driverForm.elements.name.value.trim().toUpperCase();
+  const typedTruck = driverForm.elements.truck.value.trim();
+  const truck = typedTruck ? (inList(state.lists.trucks, typedTruck) || "") : "";
+  if (!code || !name){ $("#driverMsg").textContent = "Enter both a driver code and a driver name."; return; }
+  if (typedTruck && !truck){ $("#driverMsg").textContent = "Truck " + typedTruck.toUpperCase() + " isn’t in the truck list. Pick one from the list, or add it under “Edit dropdown lists”."; return; }
+  const clash = state.drivers.find(d => d.code.toLowerCase() === code.toLowerCase() && d.id !== editingDriver);
+  if (clash){ $("#driverMsg").textContent = "Driver code " + code + " already belongs to " + clash.name + "."; return; }
+  if (editingDriver){
+    const d = driverById(editingDriver); Object.assign(d, { code, name, truck });
+    saveMasters(); driverDlg.close(); renderAll(); resetForm(); toast("Driver saved");
+  } else {
+    const d = { id: uid(), code, name, truck };
+    state.drivers.push(d); entries[d.id] = [];
+    saveMasters(); saveDriver(d.id); driverDlg.close(); openDriver(d.id); toast("Driver added");
+  }
+});
+armDelete($("#delDriverBtn"), () => {
+  const d = driverById(currentId); if (!d) return;
+  state.drivers = state.drivers.filter(x => x.id !== d.id);
+  delete entries[d.id];
+  saveMasters(); removeDriverDoc(d.id);
+  currentId = null; renderAll(); toast("Driver deleted");
+  const b = $("#delDriverBtn"); delete b.dataset.armed; b.textContent = "Delete driver";
+});
+
+/* ---------- dropdown lists ---------- */
+const listsDlg = $("#listsDlg");
+function renderLists(){
+  const body = $("#listsBody"); body.innerHTML = "";
+  for (const [key, label] of LISTS){
+    const block = document.createElement("div"); block.className = "list-block";
+    const h = document.createElement("h3"); h.textContent = label; block.appendChild(h);
+    const chips = document.createElement("div"); chips.className = "chips";
+    const vals = state.lists[key];
+    if (!vals.length){ const p = document.createElement("span"); p.className = "empty-note"; p.textContent = "No options yet."; chips.appendChild(p); }
+    vals.forEach((v, i) => {
+      const c = document.createElement("span"); c.className = "chip";
+      const t = document.createElement("span"); t.textContent = key === "batha" ? v + "%" : v;
+      const x = document.createElement("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Remove " + v);
+      x.addEventListener("click", () => { vals.splice(i, 1); saveMasters(); renderLists(); });
+      c.append(t, x); chips.appendChild(c);
+    });
+    block.appendChild(chips);
+    const row = document.createElement("div"); row.className = "add-row";
+    const inp = document.createElement("input"); inp.placeholder = key === "batha" ? "e.g. 12.5" : "Add " + label.toLowerCase();
+    if (key === "batha"){ inp.type = "number"; inp.step = "any"; inp.min = "0"; }
+    const add = document.createElement("button"); add.type = "button"; add.className = "btn small"; add.textContent = "Add";
+    const doAdd = () => {
+      const v = inp.value.trim(); if (!v) return;
+      if (vals.some(x => x.toLowerCase() === v.toLowerCase())){ inp.select(); return; }
+      vals.push(v); saveMasters(); renderLists();
+      const again = $("#listsBody").querySelectorAll(".add-row input")[LISTS.findIndex(l => l[0] === key)]; if (again) again.focus();
+    };
+    add.addEventListener("click", doAdd);
+    inp.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doAdd(); } });
+    row.append(inp, add); block.appendChild(row);
+    body.appendChild(block);
+  }
+  renderDatalists();
+}
+$("#listsBtn").addEventListener("click", () => { renderLists(); listsDlg.showModal(); });
+$("#listsDone").addEventListener("click", () => listsDlg.close());
+listsDlg.addEventListener("close", () => { if (currentId){ const e = readForm(); writeForm(e); } });
+
+/* ---------- Excel export ---------- */
+/* Columns match the manual sheet: A DATE ... U BAL. Calculated columns are written as live Excel formulas. */
+const XL_HEAD = ["DATE","TRUCK NO","DRIVER CODE","DRIVER NAME","QTY","GRADE","T/NT","FROM","DESTINATION","ADVANCE","LOAD","UNLOAD","RTO","PC","GATE","BILLS","KARCHU","DRIVER FRT","TOT FRT","BATHA","BAL"];
+const LINE = { style:"thin", color:{ rgb:"8C8C8C" } };
+const BORDER = { top:LINE, bottom:LINE, left:LINE, right:LINE };
+const ST_HEAD = { font:{ bold:true, color:{ rgb:"FFFFFF" } }, fill:{ patternType:"solid", fgColor:{ rgb:"1F4E79" } }, alignment:{ horizontal:"center", vertical:"center" }, border:BORDER };
+const ST_CELL = { alignment:{ horizontal:"center" }, border:BORDER };
+const ST_CELL0 = { alignment:{ horizontal:"center" }, border:BORDER, numFmt:"0" };
+const ST_TOT = { font:{ bold:true }, alignment:{ horizontal:"right" } };
+const ST_TOT0 = { font:{ bold:true }, alignment:{ horizontal:"right" }, numFmt:"0" };
+const ST_GRAND = { font:{ bold:true }, alignment:{ horizontal:"right" }, numFmt:"0", fill:{ patternType:"solid", fgColor:{ rgb:"FFFF00" } } };
+function sheetFor(d){
+  const ws = {}; const rows = sortedRows(d.id);
+  const put = (r, c, cell) => { ws[XLSX.utils.encode_cell({ r, c })] = cell; };
+  const txt = (r, c, v) => put(r, c, { t:"s", v: v == null ? "" : String(v), s: ST_CELL });
+  const numCell = (r, c, v) => { if (v === "" || v == null) txt(r, c, ""); else put(r, c, { t:"n", v: num(v), s: ST_CELL }); };
+  XL_HEAD.forEach((h, c) => put(0, c, { t:"s", v:h, s:ST_HEAD }));
+  const sums = new Array(21).fill(0);
+  rows.forEach((e, i) => {
+    const r = i + 1, x = r + 1, c = calc(e);
+    txt(r,0,showDate(e.date)); txt(r,1,e.truck); txt(r,2,e.code); txt(r,3,e.name);
+    numCell(r,4,e.qty);
+    txt(r,5,e.grade); txt(r,6,e.tnt); txt(r,7,e.from); txt(r,8,e.dest);
+    ["advance","load","unload","rto","pc","gate","bills"].forEach((k, j) => { numCell(r, 9 + j, e[k]); sums[9 + j] += num(e[k]); });
+    put(r,16,{ t:"n", v:c.karchu, f:"SUM(K"+x+":P"+x+")", s:ST_CELL });
+    numCell(r,17,e.driverFrt); sums[17] += num(e.driverFrt);
+    if (hasManual(e)) put(r,18,{ t:"n", v:c.totFrt, s:ST_CELL });
+    else put(r,18,{ t:"n", v:c.totFrt, f:"N(E"+x+")*N(R"+x+")", s:ST_CELL });
+    put(r,19,{ t:"n", v:c.batha, f:"N(S"+x+")*"+num(e.batha)+"/100", s:ST_CELL0 });
+    put(r,20,{ t:"n", v:c.balance, f:"N(T"+x+")-(N(J"+x+")-N(Q"+x+"))", s:ST_CELL0 });
+    sums[16] += c.karchu; sums[18] += c.totFrt; sums[19] += c.batha; sums[20] += c.balance;
+  });
+  const tr = rows.length + 1, last = rows.length + 1;
+  for (let ci = 9; ci <= 20; ci++){
+    const col = XLSX.utils.encode_col(ci);
+    const style = ci === 20 ? ST_GRAND : (ci === 19 ? ST_TOT0 : ST_TOT);
+    put(tr, ci, { t:"n", v:r2(sums[ci]), f:"SUM("+col+"2:"+col+last+")", s:style });
+  }
+  ws["!ref"] = XLSX.utils.encode_range({ s:{ r:0, c:0 }, e:{ r:tr, c:20 } });
+  ws["!cols"] = [12,13,13,14,8,10,7,10,18,10,8,9,8,7,7,8,10,11,11,9,9].map(w => ({ wch:w }));
+  return ws;
+}
+function sheetName(d, used){
+  let n = (d.code + " " + d.name).replace(/[\[\]\*\?\/\\:]/g, " ").slice(0, 31).trim() || "Driver";
+  let base = n, i = 2; while (used.has(n)) { n = base.slice(0, 28) + " " + i++; }
+  used.add(n); return n;
+}
+const safeFile = s => s.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "driver";
+async function saveWorkbook(wb, filename){
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  let dl = null;
+  try { if (window.claude && typeof window.claude.use === "function") dl = await claude.use("downloads"); } catch(e){}
+  if (dl){
+    try { await dl.save({ filename, data: blob }); toast("Excel file saved"); }
+    catch(err){
+      const code = err && err.code;
+      if (code === "declined") toast("Download cancelled");
+      else if (code === "rate_limited") toast("A download is already waiting for your answer");
+      else toast("Couldn’t save the file here (" + (code || "error") + ")");
+    }
+    return;
+  }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function xlsxReady(){ if (typeof XLSX === "undefined"){ toast("The Excel library didn’t load. Reload the page and try again."); return false; } return true; }
+$("#exportBtn").addEventListener("click", () => {
+  const d = driverById(currentId); if (!d || !xlsxReady()) return;
+  if (!(entries[d.id] || []).length){ toast("Add at least one entry before exporting"); return; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheetFor(d), sheetName(d, new Set()));
+  saveWorkbook(wb, safeFile(d.code + "_" + d.name) + "_salary.xlsx");
+});
+$("#exportAllBtn").addEventListener("click", () => {
+  if (!state.drivers.length || !xlsxReady()) return;
+  const wb = XLSX.utils.book_new(); const used = new Set();
+  state.drivers.slice().sort((a,b) => a.name.localeCompare(b.name)).forEach(d => XLSX.utils.book_append_sheet(wb, sheetFor(d), sheetName(d, used)));
+  saveWorkbook(wb, "all_drivers_salary_" + today() + ".xlsx");
+});
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
+
+init();
+})();
+</script>
+</body>
+</html>
