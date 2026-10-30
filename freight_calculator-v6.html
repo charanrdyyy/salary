@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truck Freight Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f3f1ec;
+    --surface: #ffffff;
+    --ink: #1d2327;
+    --muted: #5d676d;
+    --line: #d4d0c6;
+    --head: #2b3a42;
+    --head-ink: #ffffff;
+    --accent: #1f6f5c;
+    --calc: #eef2f0;
+    --cleared: #cdeed3;
+    --neg: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161a1c;
+      --surface: #1f2528;
+      --ink: #e8ebec;
+      --muted: #9aa5ab;
+      --line: #364046;
+      --head: #0f1416;
+      --head-ink: #e8ebec;
+      --accent: #4fb89d;
+      --calc: #262e32;
+      --cleared: #1f4a2c;
+      --neg: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    padding: 20px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 14px;
+  }
+  input[type=text] { text-transform: uppercase; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  h3 { margin: 22px 0 8px; font-size: 16px; }
+  p.sub { margin: 0 0 16px; color: var(--muted); }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  button {
+    font: inherit;
+    padding: 9px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: max-content; min-width: 100%; }
+  th {
+    background: var(--head);
+    color: var(--head-ink);
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+  }
+  td { padding: 6px 5px; border-bottom: 1px solid var(--line); }
+  td input, td select {
+    width: 100%;
+    min-width: 90px;
+    padding: 7px 6px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+  }
+  td input.num { min-width: 80px; text-align: right; }
+  td input[type=date] { min-width: 130px; }
+  td.place { min-width: 150px; }
+  td.calc input { background: var(--calc); font-weight: 600; }
+  td.chk { text-align: center; }
+  td.chk input { width: 20px; height: 20px; min-width: 0; accent-color: var(--accent); cursor: pointer; }
+  tr.cleared td { background: var(--cleared); }
+  tr.cleared td.calc input { background: transparent; }
+  .neg { color: var(--neg); }
+  .del { padding: 5px 9px; background: transparent; color: var(--neg); border-color: var(--line); }
+  tfoot td { font-weight: 700; padding: 10px 8px; background: var(--calc); }
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; min-width: 190px; }
+  .stat span { display: block; color: var(--muted); font-size: 12.5px; }
+  .stat strong { font-size: 20px; }
+  .stat.profit strong { color: var(--accent); }
+  .layout { display: flex; gap: 16px; align-items: flex-start; }
+  .main { flex: 1; min-width: 0; }
+  .side {
+    width: 330px; flex: none;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    position: sticky; top: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+  .side h2 { margin: 0 0 4px; font-size: 16px; }
+  .side p { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+  .mat { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px 10px; margin-bottom: 10px; }
+  .mat h4 { margin: 0 0 6px; font-size: 13.5px; }
+  .mat .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+  .mat label { display: block; font-size: 12px; color: var(--muted); }
+  .mat input { display: block; width: 100%; margin-top: 2px; padding: 6px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
+  .mat input.num { text-align: right; }
+  .mat .wide { grid-column: 1 / -1; }
+  .side label.opt { display: flex; gap: 6px; align-items: center; margin: 6px 0 10px; font-size: 13px; color: var(--ink); }
+  .side button { width: 100%; }
+  #rateMsg { margin-top: 8px; color: var(--accent); font-size: 13px; min-height: 16px; }
+  @media (max-width: 960px) {
+    .layout { flex-direction: column; }
+    .side { width: 100%; position: static; order: -1; max-height: none; }
+  }
+  .mf { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .mf select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  #monthTbl { width: 100%; }
+  #monthTbl td { padding: 9px 10px; text-align: right; }
+  #monthTbl td:first-child, #monthTbl th:first-child { text-align: left; }
+  #monthTbl th { text-align: right; position: static; }
+  #monthTbl tbody tr { cursor: pointer; }
+  #monthTbl tbody tr:hover td { background: var(--calc); }
+  #monthTbl tr.active td { background: var(--calc); font-weight: 700; }
+  .only-small { display: none; }
+  button { touch-action: manipulation; }
+  html { -webkit-text-size-adjust: 100%; }
+  .stat { flex: 1 1 170px; min-width: 0; }
+
+  /* Touch devices: bigger tap targets, 16px text stops iOS from zooming on focus */
+  @media (pointer: coarse) {
+    td input, td select, .mat input, .mf select, button { min-height: 42px; }
+    td input, td select, .mat input, .mf select { font-size: 16px; }
+    td.chk input { width: 26px; height: 26px; min-height: 0; }
+  }
+
+  /* Tablets and small laptops: the rates panel becomes a toggle */
+  @media (max-width: 1100px) {
+    .layout { flex-direction: column; }
+    .main { width: 100%; }
+    .side { display: none; width: 100%; position: static; max-height: none; }
+    .side.open { display: block; }
+    .only-small { display: inline-block; }
+    .mat-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+    .mat-list .mat { margin-bottom: 0; }
+  }
+
+  /* Tablets (portrait) and phones: every trip becomes a card instead of a wide table */
+  @media (max-width: 820px) {
+    body { padding: 12px; }
+    h1 { font-size: 19px; }
+    .toolbar button { flex: 1 1 auto; }
+    .mf { width: 100%; margin-left: 0; }
+    .mf select { flex: 1; }
+    #tblWrap { overflow: visible; background: transparent; border: 0; }
+    #tbl, #tbl tbody { display: block; width: 100%; min-width: 0; }
+    #tbl thead, #tbl tfoot { display: none; }
+    #tbl tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 10px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    #tbl tr.cleared { background: var(--cleared); }
+    #tbl tr.cleared td { background: transparent; }
+    #tbl td { display: block; padding: 0; border: 0; min-width: 0; }
+    #tbl td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #tbl td.chk { grid-column: 1 / -1; display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 10px; }
+    #tbl td.chk::before { margin: 0; font-size: 14px; color: var(--ink); font-weight: 600; }
+    #tbl td.delcell { grid-column: 1 / -1; text-align: right; }
+    #tbl td input, #tbl td select { min-width: 0; width: 100%; font-size: 16px; min-height: 42px; }
+    #tbl td.chk input { width: 26px; height: 26px; min-height: 0; }
+    #tbl td.place { min-width: 0; }
+    #monthTbl th, #monthTbl td { padding: 8px 6px; font-size: 13px; white-space: normal; }
+  }
+  @media (min-width: 600px) and (max-width: 820px) {
+    #tbl tr { grid-template-columns: repeat(3, 1fr); }
+  }
+  .hint { margin-top: 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>Truck Freight Calculator</h1>
+<p class="sub">Enter each trip in a row. Shaded columns are calculated automatically. Text is always entered in capitals.</p>
+
+<div class="layout">
+<div class="main">
+
+<div class="summary">
+  <div class="stat profit"><span id="s_plabel">Total profit</span><strong id="s_profit">0.00</strong></div>
+  <div class="stat"><span id="s_blabel">Unpaid balance</span><strong id="s_balance">0.00</strong></div>
+</div>
+
+<div class="toolbar">
+  <button onclick="addRow()">Add row</button>
+  <button onclick="downloadExcel()">Download Excel</button>
+  <button class="ghost" onclick="clearAll()">Clear all rows</button>
+  <button class="ghost only-small" onclick="toggleRates()">Material rates</button>
+  <label class="mf">Month
+    <select id="monthFilter" onchange="applyFilter()"><option value="all">All months</option></select>
+  </label>
+</div>
+
+<div class="wrap" id="tblWrap">
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Cleared</th>
+        <th>Date</th>
+        <th>Owner name</th>
+        <th>Truck number</th>
+        <th>Material</th>
+        <th>Original rate</th>
+        <th>Market rate</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Quantity (load)</th>
+        <th>Unload qty</th>
+        <th>Shortage %</th>
+        <th>Freight</th>
+        <th>Advance</th>
+        <th>Diesel rate</th>
+        <th>Diesel (litres)</th>
+        <th>Diesel amount</th>
+        <th>Office / Mamul</th>
+        <th>Balance</th>
+        <th>Profit</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="body"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="12" id="t_label">Totals</td>
+        <td id="t_freight">0.00</td>
+        <td id="t_advance">0.00</td>
+        <td></td>
+        <td></td>
+        <td id="t_diesel">0.00</td>
+        <td id="t_office">0.00</td>
+        <td id="t_balance">0.00</td>
+        <td id="t_profit">0.00</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<p class="hint">
+  Quantity is the load quantity. &nbsp;|&nbsp;
+  Shortage % = (Quantity − Unload qty) ÷ Quantity × 100 &nbsp;|&nbsp;
+  Freight = Quantity × Market rate &nbsp;|&nbsp;
+  Diesel amount = Litres × Diesel rate<br>
+  Balance = Freight − Advance − Diesel amount − Office/Mamul &nbsp;|&nbsp;
+  Profit = (Original rate − Market rate) × Quantity &nbsp;|&nbsp;
+  Ticking Cleared marks the balance as paid, so it is left out of the balance totals. Profit still counts it.
+</p>
+
+<h3>Month-wise summary</h3>
+<div class="wrap">
+  <table id="monthTbl">
+    <thead>
+      <tr><th>Month</th><th>Trips</th><th>Freight</th><th>Unpaid balance</th><th>Profit</th></tr>
+    </thead>
+    <tbody id="monthBody"></tbody>
+    <tfoot><tr id="monthFoot"></tr></tfoot>
+  </table>
+</div>
+
+</div>
+
+<aside class="side" id="ratePanel">
+  <h2>Material rates</h2>
+  <p>Used when you pick a material in a row. For From and To, type one name to fill it in automatically, or several names separated by commas to get a dropdown in the row. Cement is not listed: enter everything by hand.</p>
+  <div id="rateBody" class="mat-list"></div>
+  <label class="opt"><input type="checkbox" id="updateExisting"> Also update rates in existing rows</label>
+  <button onclick="saveRates()">Save rates</button>
+  <div id="rateMsg"></div>
+  <button class="ghost only-small" style="margin-top:10px" onclick="toggleRates()">Close</button>
+</aside>
+</div>
+
+<script>
+/* ============================================================
+   STARTING VALUES (you can also edit them in the Material rates panel)
+   from / to: one name fills the row automatically.
+              several names separated by commas make a dropdown.
+   Cement is not listed: enter its rates, From and To by hand.
+   ============================================================ */
+const RATES = {
+  gypsum: { original: 0, market: 0, from: "THOOTUKUDI", to: "ZUARI-YGL" },
+  coal:   { original: 0, market: 0, from: "NELLORE",    to: "ZUARI, DALMIA" },
+  slag:   { original: 0, market: 0, from: "JAIRAJ",     to: "ZUARI CEMENT, SHILPA CEMENT" },
+  flyash: { original: 0, market: 0, from: "NELLORE",    to: "GKV" }
+};
+/* ============================================================ */
+
+const MATERIALS = ["gypsum", "cement", "coal", "slag", "flyash"];
+const body = document.getElementById("body");
+const n = v => parseFloat(v) || 0;
+const fmt = v => v.toFixed(2);
+const parseList = s => String(s || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+
+/* Keep every text box in capitals while typing */
+document.addEventListener("input", e => {
+  const el = e.target;
+  if (el.tagName === "INPUT" && el.type === "text") {
+    const u = el.value.toUpperCase();
+    if (u !== el.value) {
+      const a = el.selectionStart, b = el.selectionEnd;
+      el.value = u;
+      try { el.setSelectionRange(a, b); } catch (err) {}
+    }
+  }
+}, true);
+
+/* Rates saved from the side panel (kept in this browser) override the defaults above */
+try {
+  const saved = JSON.parse(localStorage.getItem("freight_rates"));
+  if (saved) Object.keys(RATES).forEach(m => { if (saved[m]) RATES[m] = Object.assign({}, RATES[m], saved[m]); });
+} catch (e) {}
+
+/* ---------- Material rates panel ---------- */
+const rateBody = document.getElementById("rateBody");
+
+function renderRatePanel() {
+  rateBody.innerHTML = "";
+  Object.keys(RATES).forEach(m => {
+    const r = RATES[m];
+    const div = document.createElement("div");
+    div.className = "mat";
+    div.dataset.m = m;
+    div.innerHTML = `
+      <h4>${m.toUpperCase()}</h4>
+      <div class="grid">
+        <label>Original rate<input type="number" step="any" class="num r_o"></label>
+        <label>Market rate<input type="number" step="any" class="num r_m"></label>
+        <label class="wide">From<input type="text" class="r_f"></label>
+        <label class="wide">To<input type="text" class="r_t"></label>
+      </div>`;
+    div.querySelector(".r_o").value = r.original;
+    div.querySelector(".r_m").value = r.market;
+    div.querySelector(".r_f").value = r.from || "";
+    div.querySelector(".r_t").value = r.to || "";
+    rateBody.appendChild(div);
+  });
+}
+
+function saveRates() {
+  rateBody.querySelectorAll(".mat").forEach(div => {
+    RATES[div.dataset.m] = {
+      original: n(div.querySelector(".r_o").value),
+      market: n(div.querySelector(".r_m").value),
+      from: parseList(div.querySelector(".r_f").value).join(", "),
+      to: parseList(div.querySelector(".r_t").value).join(", ")
+    };
+  });
+  renderRatePanel();
+  try { localStorage.setItem("freight_rates", JSON.stringify(RATES)); } catch (e) {}
+
+  if (document.getElementById("updateExisting").checked) {
+    allRows().forEach(tr => {
+      const r = RATES[tr.querySelector(".material").value];
+      if (r) {
+        tr.querySelector(".orate").value = r.original;
+        tr.querySelector(".mrate").value = r.market;
+        recalc(tr);
+      }
+    });
+  }
+  const msg = document.getElementById("rateMsg");
+  msg.textContent = "Rates saved.";
+  setTimeout(() => msg.textContent = "", 2500);
+}
+
+function toggleRates() {
+  const p = document.getElementById("ratePanel");
+  p.classList.toggle("open");
+  if (p.classList.contains("open")) p.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ---------- Rows ---------- */
+function numInput(cls) {
+  return `<input type="number" step="any" class="num ${cls}">`;
+}
+
+/* One name -> filled in automatically. Several names -> dropdown. None -> type by hand. */
+function setPlace(tr, cls, list) {
+  const input = tr.querySelector("." + cls);
+  const sel = tr.querySelector("." + cls + "-sel");
+  input.value = "";
+  sel.innerHTML = "";
+  if (list.length > 1) {
+    sel.innerHTML = '<option value="">SELECT</option>' + list.map(x => `<option value="${x}">${x}</option>`).join("");
+    sel.hidden = false;
+    input.hidden = true;
+  } else {
+    if (list.length === 1) input.value = list[0];
+    sel.hidden = true;
+    input.hidden = false;
+  }
+}
+
+function addRow() {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td class="chk" data-label="Cleared (balance paid)"><input type="checkbox" class="cleared" title="Balance cleared"></td>
+    <td data-label="Date"><input type="date" class="date"></td>
+    <td data-label="Owner name"><input type="text" class="owner"></td>
+    <td data-label="Truck number"><input type="text" class="truck"></td>
+    <td data-label="Material">
+      <select class="material">
+        <option value="">SELECT</option>
+        ${MATERIALS.map(m => `<option value="${m}">${m.toUpperCase()}</option>`).join("")}
+      </select>
+    </td>
+    <td data-label="Original rate">${numInput("orate")}</td>
+    <td data-label="Market rate">${numInput("mrate")}</td>
+    <td class="place" data-label="From"><input type="text" class="from"><select class="from-sel" hidden></select></td>
+    <td class="place" data-label="To"><input type="text" class="to"><select class="to-sel" hidden></select></td>
+    <td data-label="Quantity (load)">${numInput("qty")}</td>
+    <td data-label="Unload qty">${numInput("unload")}</td>
+    <td class="calc" data-label="Shortage %"><input type="text" class="shortage" readonly tabindex="-1"></td>
+    <td class="calc" data-label="Freight"><input type="text" class="freight" readonly tabindex="-1"></td>
+    <td data-label="Advance">${numInput("advance")}</td>
+    <td data-label="Diesel rate">${numInput("drate")}</td>
+    <td data-label="Diesel (litres)">${numInput("litres")}</td>
+    <td class="calc" data-label="Diesel amount"><input type="text" class="diesel" readonly tabindex="-1"></td>
+    <td data-label="Office / Mamul">${numInput("office")}</td>
+    <td class="calc" data-label="Balance"><input type="text" class="balance" readonly tabindex="-1"></td>
+    <td class="calc" data-label="Profit"><input type="text" class="profit" readonly tabindex="-1"></td>
+    <td class="delcell"><button class="del" title="Delete row">✕ Delete</button></td>
+  `;
+  body.appendChild(tr);
+
+  tr.querySelector(".material").addEventListener("change", e => {
+    const r = RATES[e.target.value];
+    tr.querySelector(".orate").value = r ? r.original : "";
+    tr.querySelector(".mrate").value = r ? r.market : "";
+    setPlace(tr, "from", r ? parseList(r.from) : []);
+    setPlace(tr, "to", r ? parseList(r.to) : []);
+    if (e.target.value === "cement") tr.querySelector(".orate").focus();
+    recalc(tr);
+  });
+  ["from", "to"].forEach(c => {
+    tr.querySelector("." + c + "-sel").addEventListener("change", e => {
+      tr.querySelector("." + c).value = e.target.value;
+    });
+  });
+  tr.addEventListener("input", e => {
+    recalc(tr);
+    if (e.target.classList.contains("date")) refreshMonths();
+  });
+  tr.querySelector(".cleared").addEventListener("change", e => {
+    tr.classList.toggle("cleared", e.target.checked);
+    totals();
+  });
+  tr.querySelector(".del").addEventListener("click", () => {
+    tr.remove();
+    refreshMonths();
+  });
+  recalc(tr);
+}
+
+function recalc(tr) {
+  const q = s => tr.querySelector(s);
+  const qty = n(q(".qty").value);
+  const unload = n(q(".unload").value);
+  const shortage = (qty > 0 && q(".unload").value !== "") ? ((qty - unload) / qty) * 100 : null;
+  const freight = qty * n(q(".mrate").value);
+  const diesel = n(q(".litres").value) * n(q(".drate").value);
+  const balance = freight - n(q(".advance").value) - diesel - n(q(".office").value);
+  const profit = (n(q(".orate").value) - n(q(".mrate").value)) * qty;
+
+  q(".shortage").value = shortage === null ? "" : fmt(shortage) + " %";
+  q(".freight").value = fmt(freight);
+  q(".diesel").value = fmt(diesel);
+  q(".balance").value = fmt(balance);
+  q(".balance").classList.toggle("neg", balance < 0);
+  q(".profit").value = fmt(profit);
+  q(".profit").classList.toggle("neg", profit < 0);
+  totals();
+}
+
+/* ---------- Totals, months, filter ---------- */
+const allRows = () => [...body.querySelectorAll("tr")];
+const isCleared = tr => tr.querySelector(".cleared").checked;
+const sumOf = (rows, cls) => rows.reduce((a, tr) => a + n(tr.querySelector(cls).value), 0);
+const monthKey = tr => tr.querySelector(".date").value.slice(0, 7);
+
+function hasData(tr) {
+  return [".date", ".owner", ".truck", ".material", ".qty"].some(c => tr.querySelector(c).value !== "");
+}
+
+function monthLabel(k, long) {
+  if (!k) return "No date";
+  const [y, m] = k.split("-");
+  return new Date(+y, +m - 1, 1).toLocaleString("en-US", { month: long ? "long" : "short", year: "numeric" });
+}
+
+function groupByMonth(rows) {
+  const g = {};
+  rows.filter(hasData).forEach(tr => {
+    const k = monthKey(tr);
+    const o = g[k] || (g[k] = { trips: 0, freight: 0, balance: 0, profit: 0 });
+    o.trips++;
+    o.freight += n(tr.querySelector(".freight").value);
+    if (!isCleared(tr)) o.balance += n(tr.querySelector(".balance").value);
+    o.profit += n(tr.querySelector(".profit").value);
+  });
+  return g;
+}
+
+const sortedKeys = g => Object.keys(g).sort((a, b) => a === "" ? 1 : b === "" ? -1 : a.localeCompare(b));
+
+function totals() {
+  const sel = document.getElementById("monthFilter").value;
+  const rows = allRows().filter(tr => !tr.hidden);
+  const unpaid = rows.filter(tr => !isCleared(tr));
+  const set = (id, v) => document.getElementById(id).textContent = v;
+  set("t_freight", fmt(sumOf(rows, ".freight")));
+  set("t_advance", fmt(sumOf(rows, ".advance")));
+  set("t_diesel", fmt(sumOf(rows, ".diesel")));
+  set("t_office", fmt(sumOf(rows, ".office")));
+  set("t_balance", fmt(sumOf(unpaid, ".balance")));
+  set("t_profit", fmt(sumOf(rows, ".profit")));
+  set("s_balance", fmt(sumOf(unpaid, ".balance")));
+  set("s_profit", fmt(sumOf(rows, ".profit")));
+  const where = sel === "all" ? "all months" : monthLabel(sel, true);
+  set("s_plabel", "Total profit (" + where + ")");
+  set("s_blabel", "Unpaid balance (" + where + ")");
+  set("t_label", (sel === "all" ? "Totals" : "Totals: " + monthLabel(sel, true)) + " (balance excludes cleared rows)");
+  buildSummary();
+}
+
+function buildSummary() {
+  const g = groupByMonth(allRows());
+  const sel = document.getElementById("monthFilter").value;
+  const tb = document.getElementById("monthBody");
+  tb.innerHTML = "";
+  const t = { trips: 0, freight: 0, balance: 0, profit: 0 };
+  sortedKeys(g).forEach(k => {
+    const o = g[k];
+    Object.keys(t).forEach(f => t[f] += o[f]);
+    const tr = document.createElement("tr");
+    if (k === sel) tr.className = "active";
+    tr.title = k ? "Click to show only this month" : "";
+    tr.innerHTML = `<td>${monthLabel(k, true)}</td><td>${o.trips}</td><td>${fmt(o.freight)}</td><td>${fmt(o.balance)}</td><td>${fmt(o.profit)}</td>`;
+    if (k) tr.addEventListener("click", () => {
+      const f = document.getElementById("monthFilter");
+      f.value = (f.value === k) ? "all" : k;
+      applyFilter();
+    });
+    tb.appendChild(tr);
+  });
+  document.getElementById("monthFoot").innerHTML =
+    `<td>All months</td><td>${t.trips}</td><td>${fmt(t.freight)}</td><td>${fmt(t.balance)}</td><td>${fmt(t.profit)}</td>`;
+}
+
+function refreshMonths() {
+  const f = document.getElementById("monthFilter");
+  const current = f.value;
+  const keys = sortedKeys(groupByMonth(allRows())).filter(k => k !== "");
+  f.innerHTML = '<option value="all">All months</option>' +
+    keys.map(k => `<option value="${k}">${monthLabel(k, true)}</option>`).join("");
+  f.value = keys.includes(current) ? current : "all";
+  applyFilter();
+}
+
+function applyFilter() {
+  const sel = document.getElementById("monthFilter").value;
+  allRows().forEach(tr => {
+    const k = monthKey(tr);
+    // rows with no date stay visible so a new row never disappears while you fill it in
+    tr.hidden = !(sel === "all" || k === "" || k === sel);
+  });
+  totals();
+}
+
+function clearAll() {
+  if (confirm("Remove all rows?")) {
+    body.innerHTML = "";
+    addRow();
+    refreshMonths();
+  }
+}
+
+/* ---------- Excel ---------- */
+function rowArray(tr) {
+  const v = s => tr.querySelector(s).value;
+  const num = s => (v(s) === "" ? "" : n(v(s)));
+  const qty = n(v(".qty")), unload = n(v(".unload"));
+  return [
+    v(".date"), v(".owner"), v(".truck"), v(".material").toUpperCase(),
+    num(".orate"), num(".mrate"), v(".from"), v(".to"),
+    num(".qty"), num(".unload"),
+    (qty > 0 && v(".unload") !== "") ? +(((qty - unload) / qty) * 100).toFixed(2) : "",
+    +n(v(".freight")), num(".advance"), num(".drate"), num(".litres"),
+    +n(v(".diesel")), num(".office"), +n(v(".balance")), +n(v(".profit")),
+    isCleared(tr) ? "Yes" : "No"
+  ];
+}
+
+function downloadExcel() {
+  const rows = allRows().filter(hasData);
+  if (!rows.length) { alert("No rows to export."); return; }
+  if (typeof XLSX === "undefined") {
+    alert("Excel library could not load. Check your internet connection and reopen the file.");
+    return;
+  }
+
+  const header = ["Date", "Owner Name", "Truck Number", "Material", "Original Rate", "Market Rate",
+    "From", "To", "Quantity (Load)", "Unload Qty", "Shortage %", "Freight", "Advance",
+    "Diesel Rate", "Diesel (Litres)", "Diesel Amount", "Office/Mamul", "Balance", "Profit", "Cleared"];
+  const sumCols = [11, 12, 15, 16, 18];   // freight, advance, diesel amount, office, profit
+  const BAL = 17, CLR = 19;
+
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const g = groupByMonth(rows);
+  const keys = sortedKeys(g);
+  const sHead = ["Month", "Trips", "Freight", "Unpaid Balance", "Profit"];
+  const sRows = keys.map(k => [monthLabel(k, true), g[k].trips, +g[k].freight.toFixed(2),
+    +g[k].balance.toFixed(2), +g[k].profit.toFixed(2)]);
+  const tot = i => +sRows.reduce((a, r) => a + r[i], 0).toFixed(2);
+  sRows.push(["TOTAL", tot(1), tot(2), tot(3), tot(4)]);
+  const ss = XLSX.utils.aoa_to_sheet([sHead, ...sRows]);
+  ss["!cols"] = sHead.map(h => ({ wch: Math.max(h.length + 2, 16) }));
+  XLSX.utils.book_append_sheet(wb, ss, "Summary");
+
+  // One sheet per month
+  keys.forEach(k => {
+    const data = rows.filter(tr => monthKey(tr) === k).map(rowArray);
+    const totalRow = new Array(header.length).fill("");
+    totalRow[0] = "TOTAL (balance excludes cleared rows)";
+    sumCols.forEach(i => totalRow[i] = +data.reduce((a, r) => a + (parseFloat(r[i]) || 0), 0).toFixed(2));
+    totalRow[BAL] = +data.filter(r => r[CLR] !== "Yes").reduce((a, r) => a + (parseFloat(r[BAL]) || 0), 0).toFixed(2);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...data, totalRow]);
+    ws["!cols"] = header.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+    XLSX.utils.book_append_sheet(wb, ws, monthLabel(k, false));
+  });
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `freight_details_${stamp}.xlsx`);
+}
+
+renderRatePanel();
+addRow();
+</script>
+</body>
+</html>
